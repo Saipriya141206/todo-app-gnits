@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { getTodos, createTodo, updateTodo, deleteTodo } from "./api";
+import {
+  getTodos,
+  createTodo,
+  updateTodo,
+  deleteTodo,
+} from "./api";
+
 import { FILTERS } from "./filters";
 import Sidebar from "./components/Sidebar";
 import TodoForm from "./components/TodoForm";
@@ -11,27 +17,38 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Pagination
+  // =========================
+  // PAGINATION
+  // =========================
+
   const [currentPage, setCurrentPage] = useState(1);
+
   const tasksPerPage = 5;
 
-  // Shows an error in the banner (and logs it in the console)
+  // =========================
+  // ERROR HANDLING
+  // =========================
+
   function showError(err) {
     console.error(err);
     setError(err.message);
   }
 
-  // Load all todos once when the page opens
+  // =========================
+  // LOAD TODOS
+  // =========================
+
   useEffect(() => {
     async function loadTodos() {
       try {
         setError("");
+
         const data = await getTodos();
+
         setTodos(data);
       } catch (err) {
         showError(err);
       } finally {
-        // Stop loading whether it worked or failed
         setLoading(false);
       }
     }
@@ -39,22 +56,29 @@ function App() {
     loadTodos();
   }, []);
 
-  // Add a new todo to the top of the list
+  // =========================
+  // ADD TODO
+  // =========================
+
   async function handleAdd(title) {
     try {
       setError("");
+
       const newTodo = await createTodo(title);
 
       setTodos((prev) => [newTodo, ...prev]);
 
-      // New task appears at the beginning
+      // New task is added at the top
       setCurrentPage(1);
     } catch (err) {
       showError(err);
     }
   }
 
-  // Replace the edited todo with the updated version from the server
+  // =========================
+  // UPDATE TODO
+  // =========================
+
   async function handleUpdate(id, data) {
     try {
       setError("");
@@ -71,41 +95,28 @@ function App() {
     }
   }
 
-  // Remove one todo
+  // =========================
+  // DELETE TODO
+  // =========================
+
   async function handleDelete(id) {
     try {
       setError("");
 
       await deleteTodo(id);
 
-      setTodos((prev) => {
-        const updatedTodos = prev.filter(
-          (todo) => todo._id !== id
-        );
-
-        // Calculate how many pages are now needed
-        const filteredCount = updatedTodos.filter(
-          FILTERS[filter].test
-        ).length;
-
-        const totalPages = Math.max(
-          1,
-          Math.ceil(filteredCount / tasksPerPage)
-        );
-
-        // If current page no longer exists, move to last page
-        setCurrentPage((current) =>
-          Math.min(current, totalPages)
-        );
-
-        return updatedTodos;
-      });
+      setTodos((prev) =>
+        prev.filter((todo) => todo._id !== id)
+      );
     } catch (err) {
       showError(err);
     }
   }
 
-  // Remove every completed todo
+  // =========================
+  // CLEAR COMPLETED
+  // =========================
+
   async function handleClearDone() {
     try {
       setError("");
@@ -118,74 +129,206 @@ function App() {
         await deleteTodo(todo._id);
       }
 
-      setTodos((prev) => {
-        const updatedTodos = prev.filter(
-          (todo) => !todo.completed
-        );
-
-        const filteredCount = updatedTodos.filter(
-          FILTERS[filter].test
-        ).length;
-
-        const totalPages = Math.max(
-          1,
-          Math.ceil(filteredCount / tasksPerPage)
-        );
-
-        setCurrentPage((current) =>
-          Math.min(current, totalPages)
-        );
-
-        return updatedTodos;
-      });
+      setTodos((prev) =>
+        prev.filter((todo) => !todo.completed)
+      );
     } catch (err) {
       showError(err);
     }
   }
 
-  // Only the todos that match the selected filter
-  const filteredTodos = todos.filter(FILTERS[filter].test);
+  // =========================
+  // FILTER TODOS
+  // =========================
 
-  // "1 task" or "3 tasks"
+  const filteredTodos = todos.filter(
+    FILTERS[filter].test
+  );
+
+  // =========================
+  // TASK COUNT
+  // =========================
+
   const taskWord =
-    filteredTodos.length === 1 ? "task" : "tasks";
+    filteredTodos.length === 1
+      ? "task"
+      : "tasks";
 
-  // Total number of pages
+  // =========================
+  // TOTAL PAGES
+  // =========================
+
   const totalPages = Math.ceil(
     filteredTodos.length / tasksPerPage
   );
 
-  // Starting index for the current page
+  // =========================
+  // KEEP PAGE VALID
+  // =========================
+
+  useEffect(() => {
+    const validPages = Math.max(1, totalPages);
+
+    if (currentPage > validPages) {
+      setCurrentPage(validPages);
+    }
+  }, [totalPages, currentPage]);
+
+  // =========================
+  // CURRENT PAGE TODOS
+  // =========================
+
   const startIndex =
     (currentPage - 1) * tasksPerPage;
 
-  // Todos to display on the current page
   const currentTodos = filteredTodos.slice(
     startIndex,
     startIndex + tasksPerPage
   );
 
-  // Change page
+  // =========================
+  // CHANGE PAGE
+  // =========================
+
   function changePage(page) {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
+    if (page < 1 || page > totalPages) {
+      return;
     }
+
+    setCurrentPage(page);
   }
 
-  // Reset to page 1 when changing filters
+  // =========================
+  // CHANGE FILTER
+  // =========================
+
   function handleFilterChange(newFilter) {
     setFilter(newFilter);
+
+    // Always start from first page
     setCurrentPage(1);
   }
 
-  // Decide what to show in the list area
+  // =========================
+  // PAGE NUMBERS
+  // =========================
+
+  function getPageNumbers() {
+    return Array.from(
+      { length: totalPages },
+      (_, index) => index + 1
+    );
+  }
+
+  // =========================
+  // PAGINATION UI
+  // =========================
+
+  function renderPagination() {
+    if (totalPages <= 1) {
+      return null;
+    }
+
+    const pageNumbers = getPageNumbers();
+
+    return (
+      <div className="pagination-wrapper">
+        <div className="pagination">
+
+          {/* FIRST PAGE */}
+          <button
+            className="pagination-button navigation-button"
+            onClick={() => changePage(1)}
+            disabled={currentPage === 1}
+            aria-label="First page"
+            title="First page"
+          >
+            «
+          </button>
+
+          {/* PREVIOUS PAGE */}
+          <button
+            className="pagination-button navigation-button"
+            onClick={() =>
+              changePage(currentPage - 1)
+            }
+            disabled={currentPage === 1}
+            aria-label="Previous page"
+            title="Previous page"
+          >
+            ‹
+          </button>
+
+          {/* PAGE NUMBERS */}
+          <div className="pagination-pages">
+            {pageNumbers.map((page) => (
+              <button
+                key={page}
+                className={`pagination-button page-button ${
+                  currentPage === page
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() => changePage(page)}
+                aria-label={`Go to page ${page}`}
+                aria-current={
+                  currentPage === page
+                    ? "page"
+                    : undefined
+                }
+              >
+                {page}
+              </button>
+            ))}
+          </div>
+
+          {/* NEXT PAGE */}
+          <button
+            className="pagination-button navigation-button"
+            onClick={() =>
+              changePage(currentPage + 1)
+            }
+            disabled={currentPage === totalPages}
+            aria-label="Next page"
+            title="Next page"
+          >
+            ›
+          </button>
+
+          {/* LAST PAGE */}
+          <button
+            className="pagination-button navigation-button"
+            onClick={() =>
+              changePage(totalPages)
+            }
+            disabled={currentPage === totalPages}
+            aria-label="Last page"
+            title="Last page"
+          >
+            »
+          </button>
+
+        </div>
+      </div>
+    );
+  }
+
+  // =========================
+  // RENDER TODO LIST
+  // =========================
+
   function renderTodos() {
     if (loading) {
-      return <p className="empty">Loading...</p>;
+      return (
+        <p className="empty">
+          Loading...
+        </p>
+      );
     }
 
     if (filteredTodos.length === 0) {
-      let message = "You're all caught up. Add a task above.";
+      let message =
+        "You're all caught up. Add a task above.";
 
       if (filter === "done") {
         message = "Nothing completed yet";
@@ -212,38 +355,18 @@ function App() {
           ))}
         </ul>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="pagination">
-            <button
-              onClick={() =>
-                changePage(currentPage - 1)
-              }
-              disabled={currentPage === 1}
-            >
-              ← Previous
-            </button>
-
-            <span>
-              Page {currentPage} of {totalPages}
-            </span>
-
-            <button
-              onClick={() =>
-                changePage(currentPage + 1)
-              }
-              disabled={currentPage === totalPages}
-            >
-              Next →
-            </button>
-          </div>
-        )}
+        {renderPagination()}
       </>
     );
   }
 
+  // =========================
+  // MAIN UI
+  // =========================
+
   return (
     <div className="layout">
+
       <Sidebar
         todos={todos}
         filter={filter}
@@ -252,18 +375,29 @@ function App() {
       />
 
       <main className="panel content">
+
+        {/* HEADER */}
         <header className="content-header">
-          <h2>{FILTERS[filter].label}</h2>
+
+          <h2>
+            {FILTERS[filter].label}
+          </h2>
 
           <span className="content-count">
             {filteredTodos.length} {taskWord}
           </span>
+
         </header>
 
+        {/* ADD TODO */}
         <TodoForm onAdd={handleAdd} />
 
+        {/* ERROR */}
         {error && (
-          <div className="error" role="alert">
+          <div
+            className="error"
+            role="alert"
+          >
             <span>{error}</span>
 
             <button
@@ -275,8 +409,11 @@ function App() {
           </div>
         )}
 
+        {/* TODO LIST */}
         {renderTodos()}
+
       </main>
+
     </div>
   );
 }
