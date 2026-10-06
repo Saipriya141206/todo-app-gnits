@@ -11,6 +11,10 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const tasksPerPage = 5;
+
   // Shows an error in the banner (and logs it in the console)
   function showError(err) {
     console.error(err);
@@ -40,7 +44,11 @@ function App() {
     try {
       setError("");
       const newTodo = await createTodo(title);
+
       setTodos((prev) => [newTodo, ...prev]);
+
+      // New task appears at the beginning
+      setCurrentPage(1);
     } catch (err) {
       showError(err);
     }
@@ -49,26 +57,49 @@ function App() {
   // Replace the edited todo with the updated version from the server
   async function handleUpdate(id, data) {
     try {
-    setError("");
+      setError("");
 
-    const updated = await updateTodo(id, data);
+      const updated = await updateTodo(id, data);
 
-    setTodos((prev) =>
-      prev.map((todo) =>
-        todo._id === id ? updated : todo
-      )
-    );
-  } catch (err) {
-    showError(err);
-  }
+      setTodos((prev) =>
+        prev.map((todo) =>
+          todo._id === id ? updated : todo
+        )
+      );
+    } catch (err) {
+      showError(err);
+    }
   }
 
   // Remove one todo
   async function handleDelete(id) {
     try {
       setError("");
+
       await deleteTodo(id);
-      setTodos((prev) => prev.filter((todo) => todo._id !== id));
+
+      setTodos((prev) => {
+        const updatedTodos = prev.filter(
+          (todo) => todo._id !== id
+        );
+
+        // Calculate how many pages are now needed
+        const filteredCount = updatedTodos.filter(
+          FILTERS[filter].test
+        ).length;
+
+        const totalPages = Math.max(
+          1,
+          Math.ceil(filteredCount / tasksPerPage)
+        );
+
+        // If current page no longer exists, move to last page
+        setCurrentPage((current) =>
+          Math.min(current, totalPages)
+        );
+
+        return updatedTodos;
+      });
     } catch (err) {
       showError(err);
     }
@@ -78,13 +109,35 @@ function App() {
   async function handleClearDone() {
     try {
       setError("");
-      const doneTodos = todos.filter((todo) => todo.completed);
+
+      const doneTodos = todos.filter(
+        (todo) => todo.completed
+      );
 
       for (const todo of doneTodos) {
         await deleteTodo(todo._id);
       }
 
-      setTodos((prev) => prev.filter((todo) => !todo.completed));
+      setTodos((prev) => {
+        const updatedTodos = prev.filter(
+          (todo) => !todo.completed
+        );
+
+        const filteredCount = updatedTodos.filter(
+          FILTERS[filter].test
+        ).length;
+
+        const totalPages = Math.max(
+          1,
+          Math.ceil(filteredCount / tasksPerPage)
+        );
+
+        setCurrentPage((current) =>
+          Math.min(current, totalPages)
+        );
+
+        return updatedTodos;
+      });
     } catch (err) {
       showError(err);
     }
@@ -94,7 +147,36 @@ function App() {
   const filteredTodos = todos.filter(FILTERS[filter].test);
 
   // "1 task" or "3 tasks"
-  const taskWord = filteredTodos.length === 1 ? "task" : "tasks";
+  const taskWord =
+    filteredTodos.length === 1 ? "task" : "tasks";
+
+  // Total number of pages
+  const totalPages = Math.ceil(
+    filteredTodos.length / tasksPerPage
+  );
+
+  // Starting index for the current page
+  const startIndex =
+    (currentPage - 1) * tasksPerPage;
+
+  // Todos to display on the current page
+  const currentTodos = filteredTodos.slice(
+    startIndex,
+    startIndex + tasksPerPage
+  );
+
+  // Change page
+  function changePage(page) {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  }
+
+  // Reset to page 1 when changing filters
+  function handleFilterChange(newFilter) {
+    setFilter(newFilter);
+    setCurrentPage(1);
+  }
 
   // Decide what to show in the list area
   function renderTodos() {
@@ -104,6 +186,7 @@ function App() {
 
     if (filteredTodos.length === 0) {
       let message = "You're all caught up. Add a task above.";
+
       if (filter === "done") {
         message = "Nothing completed yet";
       }
@@ -117,16 +200,45 @@ function App() {
     }
 
     return (
-      <ul className="todo-list">
-        {filteredTodos.map((todo) => (
-          <TodoItem
-            key={todo._id}
-            todo={todo}
-            onUpdate={handleUpdate}
-            onDelete={handleDelete}
-          />
-        ))}
-      </ul>
+      <>
+        <ul className="todo-list">
+          {currentTodos.map((todo) => (
+            <TodoItem
+              key={todo._id}
+              todo={todo}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          ))}
+        </ul>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button
+              onClick={() =>
+                changePage(currentPage - 1)
+              }
+              disabled={currentPage === 1}
+            >
+              ← Previous
+            </button>
+
+            <span>
+              Page {currentPage} of {totalPages}
+            </span>
+
+            <button
+              onClick={() =>
+                changePage(currentPage + 1)
+              }
+              disabled={currentPage === totalPages}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -135,13 +247,14 @@ function App() {
       <Sidebar
         todos={todos}
         filter={filter}
-        onFilter={setFilter}
+        onFilter={handleFilterChange}
         onClearDone={handleClearDone}
       />
 
       <main className="panel content">
         <header className="content-header">
           <h2>{FILTERS[filter].label}</h2>
+
           <span className="content-count">
             {filteredTodos.length} {taskWord}
           </span>
@@ -152,7 +265,11 @@ function App() {
         {error && (
           <div className="error" role="alert">
             <span>{error}</span>
-            <button onClick={() => setError("")} aria-label="Dismiss">
+
+            <button
+              onClick={() => setError("")}
+              aria-label="Dismiss"
+            >
               ×
             </button>
           </div>
