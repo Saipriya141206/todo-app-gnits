@@ -1,4 +1,5 @@
 const express = require("express");
+
 const {
   getTodos,
   createTodo,
@@ -9,8 +10,10 @@ const {
 const router = express.Router();
 
 router.get("/", getTodos);
+
 router.post("/", createTodo);
-// Complete the route for 3rd api controller
+
+router.put("/:id", updateTodo);
 
 router.delete("/:id", deleteTodo);
 
